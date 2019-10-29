@@ -18,34 +18,19 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import tempfile
 from typing import Any, Dict, List, Text
 
-import absl
-import tensorflow as tf
-
-from google.protobuf import json_format
 from tfx import types
 from tfx.components.pusher import executor as tfx_pusher_executor
 from tfx.extensions.google_cloud_ai_platform import runner
-from tfx.proto import pusher_pb2
 from tfx.types import artifact_utils
 from tfx.utils import path_utils
-
 
 _POLLING_INTERVAL_IN_SECONDS = 30
 
 
 class Executor(tfx_pusher_executor.Executor):
   """Deploy a model to Google Cloud AI Platform serving."""
-
-  def _make_local_temp_destination(self) -> Text:
-    """Make a temp destination to push the model."""
-    temp_dir = tempfile.mkdtemp()
-    push_destination = pusher_pb2.PushDestination(
-        filesystem=pusher_pb2.PushDestination.Filesystem(
-            base_directory=temp_dir))
-    return json_format.MessageToJson(push_destination)
 
   def Do(self, input_dict: Dict[Text, List[types.Artifact]],
          output_dict: Dict[Text, List[types.Artifact]],
@@ -79,14 +64,7 @@ class Executor(tfx_pusher_executor.Executor):
     model_export = artifact_utils.get_single_instance(
         input_dict['model_export'])
     model_export_uri = model_export.uri
-    model_blessing_uri = artifact_utils.get_single_uri(
-        input_dict['model_blessing'])
     model_push = artifact_utils.get_single_instance(output_dict['model_push'])
-    # TODO(jyzhao): should this be in driver or executor.
-    if not tf.io.gfile.exists(os.path.join(model_blessing_uri, 'BLESSED')):
-      model_push.set_int_custom_property('pushed', 0)
-      absl.logging.info('Model on %s was not blessed', model_blessing_uri)
-      return
 
     exec_properties_copy = exec_properties.copy()
     custom_config = exec_properties_copy.pop('custom_config', {})
@@ -101,8 +79,5 @@ class Executor(tfx_pusher_executor.Executor):
       runner.deploy_model_for_cmle_serving(model_path, model_version,
                                            ai_platform_serving_args)
 
-    # Make sure artifacts are populated in a standard way by calling
-    # tfx.pusher.executor.Executor.Do().
-    exec_properties_copy['push_destination'] = exec_properties.get(
-        'push_destination') or self._make_local_temp_destination()
-    super(Executor, self).Do(input_dict, output_dict, exec_properties_copy)
+    model_push.set_int_custom_property('pushed', 1)
+    model_push.set_string_custom_property('pushed_model', model_path)

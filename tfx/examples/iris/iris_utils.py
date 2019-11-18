@@ -48,17 +48,14 @@ def _example_serving_receiver_fn(schema):
     schema: the schema of the input data.
 
   Returns:
-    Tensorflow graph which parses examples, applying tf-transform to them.
+    serving_input_resiver_fn for serving this model, since no transformation is
+    required in this case it does not include a tf-transform graph.
   """
   raw_feature_spec = _get_raw_feature_spec(schema)
   raw_feature_spec.pop(_LABEL_KEY)
 
-  raw_input_fn = tf.estimator.export.build_parsing_serving_input_receiver_fn(
+  return tf.estimator.export.build_parsing_serving_input_receiver_fn(
       raw_feature_spec, default_batch_size=None)
-  serving_input_receiver = raw_input_fn()
-
-  return tf.estimator.export.ServingInputReceiver(
-      serving_input_receiver.features, serving_input_receiver.receiver_tensors)
 
 
 def _eval_input_receiver_fn(schema):
@@ -69,10 +66,10 @@ def _eval_input_receiver_fn(schema):
 
   Returns:
     EvalInputReceiver function, which contains:
-      - Tensorflow graph which parses raw untransformed features, applies the
-        tf-transform preprocessing operators.
-      - Set of raw, untransformed features.
-      - Label against which predictions will be compared.
+      - Tensorflow graph which would normally perform tf-transform on raw input
+      in this case no preprocessing is needed, input is directly passsed in.
+      - features - same as raw_features since no transformaiton is needed.
+      - Labels
   """
   # Notice that the inputs are raw features, not transformed features here.
   raw_feature_spec = _get_raw_feature_spec(schema)
@@ -95,7 +92,7 @@ def _eval_input_receiver_fn(schema):
 
 
 def _input_fn(filenames, schema, batch_size=200):
-  """Generates features and labels for training or evaluation.
+  """Input function for training and evaluation.
 
   Args:
     filenames: [str] list of CSV files to read data from.
